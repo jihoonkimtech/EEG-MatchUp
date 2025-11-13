@@ -2,12 +2,12 @@ import os
 import mne
 import numpy as np
 import matplotlib.pyplot as plt
-
+from mne.preprocessing import annotate_muscle_zscore
 
 # Specify the path to the base folder.
 script_dir = os.path.dirname(os.path.abspath(__file__))
 # Example: ../raw/base/ or ../raw/info/
-target_folder = os.path.join(script_dir, "../raw/info/")
+target_folder = os.path.join(script_dir, "../raw/challenge/")
 
 # Extract folder name (prefix)
 folder_name = os.path.basename(os.path.normpath(target_folder))
@@ -59,6 +59,7 @@ if channels_to_drop:
     raw.drop_channels(channels_to_drop)
     print(f"Channels dropped: {channels_to_drop}")
 
+
 # Rename channels (e.g., Ch2 -> F3)
 rename_map = {
     'Ch2': 'F3',
@@ -69,6 +70,25 @@ rename_map = {
 # rename_channels only works if the key is present in current ch_names
 raw.rename_channels(rename_map)
 print(f"Channels renamed. Final channels: {raw.ch_names}")
+
+# 60Hz notch + 0.5~35Hz band pass
+print("\nApplying filters...")
+raw.notch_filter(freqs=[60])
+raw.filter(l_freq=0.5, h_freq=35)
+print("Filtering complete (0.5–35 Hz, notch 60 Hz)")
+
+# Average Reference
+print("\nApplying average reference...")
+raw.set_eeg_reference(ref_channels='average')
+
+# Artifact
+print("\nAnnotating muscle and blink artifacts...")
+annot_musc, scores = annotate_muscle_zscore(raw, ch_type='eeg', threshold=4.0)
+raw.set_annotations(annot_musc)
+print(f"→ {len(annot_musc)} potential artifact segments annotated.")
+
+
+
 
 # --- Save Results ---
 
