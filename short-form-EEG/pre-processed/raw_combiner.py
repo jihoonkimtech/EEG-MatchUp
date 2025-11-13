@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 
-target_folder = os.path.join(script_dir, "../raw/info/")
+target_folder = os.path.join(script_dir, "../raw/120s/")
 folder_name = os.path.basename(os.path.normpath(target_folder))
 
 file_list = glob.glob(os.path.join(target_folder, "*.mat"))
