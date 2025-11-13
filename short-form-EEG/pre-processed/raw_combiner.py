@@ -119,12 +119,14 @@ else:
 
     # set title and x-axis label only on the last plot
     axes[-1].set_xlabel('Time (s)')
-    fig.suptitle('EEG Signals (Colored & Spaced per Channel)', fontsize=16)
+    fig.suptitle(f'EEG Signals for Testcase:{folder_name}', fontsize=16)
     
     eeg_save_path = os.path.join(target_folder, f"combined_{folder_name}_sig_plot_bf_pp.png")
     fig.savefig(eeg_save_path)
 
     psd_fig = raw_combined.plot_psd(fmin=1, fmax=45, average=True, show=True)
+    psd_title = f"PSD (Power Spectral Density) for Testcase:{folder_name}"
+    psd_fig.suptitle(psd_title, fontsize=16)
     
     psd_save_path = os.path.join(target_folder, f"combined_{folder_name}_psd_plot_bf_pp.png")
     psd_fig.savefig(psd_save_path)
