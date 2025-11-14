@@ -2,10 +2,10 @@ import os
 import mne
 import numpy as np
 from scipy.io import loadmat
-import matplotlib.pyplot as plt  # <--- [추가] 플로팅을 위해 임포트
+import matplotlib.pyplot as plt 
 
 # User Configuration
-TESTCASE = "G4-Control"
+TESTCASE = "G3-Horror"
 
 # input folder path containing .mat files (relative to this script)
 INPUT_FOLDER_NAME = f"./eeg/{TESTCASE}"
@@ -22,7 +22,7 @@ SFREQ = 600  # <--- Enter the correct sampling frequency here.
 # if data is in Microvolts (µV), use 1e-6
 # if data is already in Volts (V), use 1.0
 # if data is in Millivolts (mV), use 1e-3
-DATA_SCALING_FACTOR = 1e-6  # (µV -> V)
+DATA_SCALING_FACTOR = 1.0
 
 # duration (in seconds) for splitting data into epochs
 EPOCH_DURATION_SEC = 20.0
@@ -82,14 +82,14 @@ def process_single_mat_file(mat_path, testcase_name, output_folder):
 
         # --- 3. Apply Pre-processing (similar to pre-processor.py) ---
         # 60Hz notch + 1~45Hz band pass
-        raw.notch_filter(freqs=[60], verbose=False)
-        raw.filter(l_freq=1, h_freq=45, verbose=False)
+        #raw.notch_filter(freqs=[60], verbose=False)
+        #raw.filter(l_freq=1, h_freq=45, verbose=False)
         
         # average Reference
-        raw.set_eeg_reference(ref_channels='average', verbose=False)
-        print("Filtering (1-45Hz, 60Hz notch) and Average reference applied.")
+        #raw.set_eeg_reference(ref_channels='average', verbose=False)
+        #print("Filtering (1-45Hz, 60Hz notch) and Average reference applied.")
 
-        # --- [추가] 4. Save Plots (from raw object) ---
+        # --- 4. Save Plots (from raw object) ---
 
         # --- 4A. Save PSD plot ---
         print("Generating and saving PSD plot...")
