@@ -127,7 +127,7 @@ print(f"→ {len(annot_musc)} potential artifact segments annotated.")
 # --- Save Results (Original Raw) ---
 
 # Save processed .fif file (Location: target_folder)
-fif_save_path = os.path.join(script_dir, f"pre-processed_{folder_name}_epo.fif")
+fif_save_path = os.path.join(script_dir, f"pre-processed_{folder_name}-epo.fif")
 raw.save(fif_save_path, overwrite=True)
 print(f"Final .fif file saved: {fif_save_path}")
 
