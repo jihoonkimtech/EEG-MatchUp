@@ -36,7 +36,7 @@ try:
     print(f"Found {len(events)} 'Stimulus_Playback' events from Ch6.")
 
     # Filter out events that are too close to each other
-    MIN_EVENT_SEPARATION_SEC = 5.0  # minimum 40 second between events
+    MIN_EVENT_SEPARATION_SEC = 10.0  # minimum 40 second between events
     if len(events) > 1:
         original_count = len(events)
         min_samples = MIN_EVENT_SEPARATION_SEC * raw.info['sfreq']
@@ -176,7 +176,7 @@ print(f"EEG signal plot saved: {eeg_save_path}")
 print("\n--- Starting Epoching ---")
 
 # define epoch parameters
-tmin, tmax = 1.0, 10.0  # 1000ms after stimulus, 1000ms early
+tmin, tmax = 1.0, 9.0  # 1000ms after stimulus, 1000ms early
 
 # We will use the 'Stimulus_Playback' annotations we created earlier.
 # This approach correctly handles all trigger IDs (e.g., 4 or 5)

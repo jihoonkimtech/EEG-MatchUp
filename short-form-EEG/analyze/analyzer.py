@@ -14,7 +14,7 @@ target_folder = os.path.join(script_dir, "../pre-processed/")
 
 REACTION_DELAY_SECONDS = 0.5  
 
-testcase_name = "info" 
+testcase_name = "highlight" 
 # ----------------------------------------------------------
 
 # Changed underscore to hyphen to match the pre-processor's output file
@@ -104,7 +104,7 @@ plt.bar(metrics.keys(), metrics.values(), color=colors)
 plt.title(f"EEG Feature Summary ({testcase_name})")
 plt.ylabel("Value") # updated label as not all are log-scaled
 
-plt.ylim(-1.5, 2.0)
+plt.ylim(-1.0, 2.5)
 
 plt.grid(alpha=0.3, linestyle='--')
 plt.tight_layout()
