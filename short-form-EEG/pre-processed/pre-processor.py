@@ -95,7 +95,23 @@ print(f"Channels renamed. Final channels: {raw.ch_names}")
 print("\nApplying filters...")
 raw.notch_filter(freqs=[60])
 raw.filter(l_freq=1, h_freq=45)
-print("Filtering complete (1–45DHz, notch 60DHz)")
+print("Filtering complete (1–45Hz, notch 60Hz)")
+
+print("\nStarting ICA to remove muscle artifacts...")
+
+# ICA model init
+ica = mne.preprocessing.ICA(n_components=4,
+                            random_state=97, 
+                            max_iter='auto')
+
+# ICA model fit
+raw_for_ica = raw.copy().filter(l_freq=20, h_freq=None)
+ica.fit(raw_for_ica)
+
+
+# ICA apply
+ica.apply(raw)
+print("ICA applied, muscle artifacts cleaned.")
 
 # Average Reference
 print("\nApplying average reference...")
@@ -117,7 +133,7 @@ print(f"Final .fif file saved: {fif_save_path}")
 
 # Save PSD plot
 print("Generating and saving PSD plot...")
-psd_fig = raw.plot_psd(fmin=1, fmax=45, average=True, show=False)
+psd_fig = raw.plot_psd(fmin=1, fmax=30, average=True, show=False)
 psd_title = f"PSD (Processed) for Testcase:{folder_name} (F3, F4, O1, O2)"
 psd_fig.suptitle(psd_title, fontsize=16)
 psd_fig.tight_layout(rect=[0, 0.03, 1, 0.95])
