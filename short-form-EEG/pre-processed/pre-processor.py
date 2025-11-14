@@ -7,7 +7,7 @@ from mne.preprocessing import annotate_muscle_zscore
 # Specify the path to the base folder.
 script_dir = os.path.dirname(os.path.abspath(__file__))
 # Example: ../raw/base/ or ../raw/info/
-target_folder = os.path.join(script_dir, "../raw/highlight/")
+target_folder = os.path.join(script_dir, "../raw/base/")
 
 # Extract folder name (prefix)
 folder_name = os.path.basename(os.path.normpath(target_folder))
@@ -32,11 +32,11 @@ try:
     raw.set_channel_types({'Ch6': 'misc'})
     # min_duration: Ignore signals shorter than 0.01s (10ms) to prevent noise
     # this finds all rising edges (e.g., to 4 or 5)
-    events = mne.find_events(raw, stim_channel='Ch6', output='onset', min_duration=0.01)
+    events = mne.find_events(raw, stim_channel='Ch6', output='onset', min_duration=2.0)
     print(f"Found {len(events)} 'Stimulus_Playback' events from Ch6.")
 
     # Filter out events that are too close to each other
-    MIN_EVENT_SEPARATION_SEC = 35.0  # minimum 35 second between events
+    MIN_EVENT_SEPARATION_SEC = 5.0  # minimum 40 second between events
     if len(events) > 1:
         original_count = len(events)
         min_samples = MIN_EVENT_SEPARATION_SEC * raw.info['sfreq']
@@ -91,7 +91,7 @@ rename_map = {
 raw.rename_channels(rename_map)
 print(f"Channels renamed. Final channels: {raw.ch_names}")
 
-# 60Hz notch + 0.5~35Hz band pass
+# 60Hz notch + 1~45Hz band pass
 print("\nApplying filters...")
 raw.notch_filter(freqs=[60])
 raw.filter(l_freq=1, h_freq=45)
@@ -176,7 +176,7 @@ print(f"EEG signal plot saved: {eeg_save_path}")
 print("\n--- Starting Epoching ---")
 
 # define epoch parameters
-tmin, tmax = -0.2, 0.8  # 200ms before stimulus, 800ms after
+tmin, tmax = 1.0, 10.0  # 1000ms after stimulus, 1000ms early
 
 # We will use the 'Stimulus_Playback' annotations we created earlier.
 # This approach correctly handles all trigger IDs (e.g., 4 or 5)
@@ -198,6 +198,20 @@ try:
     print(f"Extracted {len(events_from_annot)} events from annotations.")
     print(f"Mapped '{event_id_desc}' to ID {event_id_code}.")
 
+    print("\n--- DEBUG: Final Event Timestamps ---")
+    if len(events_from_annot) > 0:
+        sfreq = raw.info['sfreq']
+        print(f"Found {len(events_from_annot)} events to be epoched (sfreq={sfreq}Hz):")
+        
+        for i, event_array in enumerate(events_from_annot):
+            event_sample = event_array[0]  # 이벤트 샘플 번호
+            event_time_sec = event_sample / sfreq # 샘플을 초로 변환
+            event_id = event_array[2]      # 이벤트 ID (event_mapping에서 1로 설정됨)
+            print(f"  Event {i+1}: {event_time_sec:.3f} sec (Sample: {event_sample}, ID: {event_id})")
+    else:
+        print("  No final events found from annotations.")
+    print("--- DEBUG: End --- \n")
+    
     # create epochs
     # preload=True loads data into memory
     # 'reject_by_annotation=True' (default) automatically drops epochs
@@ -207,10 +221,12 @@ try:
                         event_id=event_dict,      # use the new event_dict
                         tmin=tmin,
                         tmax=tmax,
-                        baseline=(None, 0),  # baseline from tmin to 0
+                        baseline=None,
                         preload=True,
                         reject_by_annotation=False
                         )
+    print(f"Epoch time range: {epochs.tmin}s ~ {epochs.tmax}s")
+    print(f"Number of epochs created: {len(epochs)}")
 
     print(f"Created {len(epochs)} epochs.")
     # epochs.drop_log shows which epochs were dropped and why
@@ -220,7 +236,7 @@ try:
     evoked = epochs.average()
     print("Averaged epochs to create Evoked response.")
 
-    # --- (NEW) Save Epochs and Evoked Results ---
+    # --- Save Epochs and Evoked Results ---
 
     # Save processed Epochs .fif file
     # suffix '-epo' indicates epochs file
@@ -241,15 +257,19 @@ try:
 
     # Save an epochs image plot (heatmap)
     print("Generating and saving Epochs image plot...")
-    # 'combine='gfp'' shows the global field power
-    # plot_image returns a list of figs, one per event_id
-    epochs_img_fig = epochs.plot_image(combine='gfp', show=False)
-    img_title = f'Epochs Image (GFP) for Testcase:{folder_name}'
-    epochs_img_fig[0].suptitle(img_title, fontsize=16)
-    #epochs_img_fig[0].tight_layout(rect=[0, 0.03, 1, 0.95])
-    img_save_path = os.path.join(script_dir, f"pre-processed_{folder_name}_epochs_image_plot.png")
-    epochs_img_fig[0].savefig(img_save_path)
-    print(f"Epochs image plot saved: {img_save_path}")
+    if len(epochs) > 1:
+        # 'combine='gfp'' shows the global field power
+        # plot_image returns a list of figs, one per event_id
+        epochs_img_fig = epochs.plot_image(combine='gfp', show=False)
+        img_title = f'Epochs Image (GFP) for Testcase:{folder_name}'
+        epochs_img_fig[0].suptitle(img_title, fontsize=16)
+        #epochs_img_fig[0].tight_layout(rect=[0, 0.03, 1, 0.95])
+        img_save_path = os.path.join(script_dir, f"pre-processed_{folder_name}_epochs_image_plot.png")
+        epochs_img_fig[0].savefig(img_save_path)
+        print(f"Epochs image plot saved: {img_save_path}")
+    else:
+        # [수정] 1개일 때는 함수를 호출하지 않고 건너뜀
+        print(f"Skipping Epochs image plot (requires > 1 epoch, found {len(epochs)}).")
 
 except ValueError:
     # this happens if no 'Stimulus_Playback' annotations were found
