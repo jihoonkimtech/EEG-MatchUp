@@ -7,7 +7,7 @@ from mne.preprocessing import annotate_muscle_zscore
 # Specify the path to the base folder.
 script_dir = os.path.dirname(os.path.abspath(__file__))
 # Example: ../raw/base/ or ../raw/info/
-target_folder = os.path.join(script_dir, "../raw/120s/")
+target_folder = os.path.join(script_dir, "../raw/highlight/")
 
 # Extract folder name (prefix)
 folder_name = os.path.basename(os.path.normpath(target_folder))
@@ -34,6 +34,24 @@ try:
     # this finds all rising edges (e.g., to 4 or 5)
     events = mne.find_events(raw, stim_channel='Ch6', output='onset', min_duration=0.01)
     print(f"Found {len(events)} 'Stimulus_Playback' events from Ch6.")
+
+    # Filter out events that are too close to each other
+    MIN_EVENT_SEPARATION_SEC = 35.0  # minimum 35 second between events
+    if len(events) > 1:
+        original_count = len(events)
+        min_samples = MIN_EVENT_SEPARATION_SEC * raw.info['sfreq']
+        
+        # create a list of events to keep, starting with the first
+        events_to_keep = [events[0]]
+        for i in range(1, len(events)):
+            # check time diff from the *last kept event*
+            if (events[i, 0] - events_to_keep[-1][0]) >= min_samples:
+                events_to_keep.append(events[i])
+        
+        events = np.array(events_to_keep)
+        new_count = len(events)
+        if original_count != new_count:
+            print(f"Filtered events: Kept {new_count} (removed {original_count - new_count}) that were closer than {MIN_EVENT_SEPARATION_SEC}s apart.")
 
     # 6. Convert to MNE Annotations object
     onsets = events[:, 0] / raw.info['sfreq']  # Convert samples to seconds
@@ -86,7 +104,7 @@ raw.set_eeg_reference(ref_channels='average')
 # Artifact
 print("\nAnnotating muscle and blink artifacts...")
 annot_musc, scores = annotate_muscle_zscore(raw, ch_type='eeg', threshold=4.0)
-raw.set_annotations(annot_musc)
+raw.set_annotations(raw.annotations + annot_musc)
 print(f"→ {len(annot_musc)} potential artifact segments annotated.")
 
 
@@ -174,7 +192,9 @@ try:
                         tmin=tmin,
                         tmax=tmax,
                         baseline=(None, 0),  # baseline from tmin to 0
-                        preload=True)
+                        preload=True,
+                        reject_by_annotation=False
+                        )
 
     print(f"Created {len(epochs)} epochs.")
     # epochs.drop_log shows which epochs were dropped and why
@@ -210,7 +230,7 @@ try:
     epochs_img_fig = epochs.plot_image(combine='gfp', show=False)
     img_title = f'Epochs Image (GFP) for Testcase:{folder_name}'
     epochs_img_fig[0].suptitle(img_title, fontsize=16)
-    epochs_img_fig[0].tight_layout(rect=[0, 0.03, 1, 0.95])
+    #epochs_img_fig[0].tight_layout(rect=[0, 0.03, 1, 0.95])
     img_save_path = os.path.join(script_dir, f"pre-processed_{folder_name}_epochs_image_plot.png")
     epochs_img_fig[0].savefig(img_save_path)
     print(f"Epochs image plot saved: {img_save_path}")
