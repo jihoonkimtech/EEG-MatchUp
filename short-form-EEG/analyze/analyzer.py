@@ -5,7 +5,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 # ----------------------------------------------------------
-# EEG Feature Extractor (FAA, OAA, OASI)
+# EEG Feature Extractor (FAA, OAA, OASI, FAP)
 # ----------------------------------------------------------
 
 # --- File path setup ---
@@ -14,7 +14,7 @@ target_folder = os.path.join(script_dir, "../pre-processed/")
 
 REACTION_DELAY_SECONDS = 0.5  
 
-testcase_name = "challenge" 
+testcase_name = "info" 
 # ----------------------------------------------------------
 
 # Changed underscore to hyphen to match the pre-processor's output file
@@ -41,6 +41,7 @@ except ValueError:
 print(f"Channels: {epochs.ch_names}")
 
 # Compute Power Spectral Density (PSD)
+# n_fft must be smaller than the signal length (e.g., 181 samples after crop)
 spectrum = epochs.compute_psd(method='welch', fmin=1, fmax=45, n_fft=128)
 
 # PSD data extract, calculate average
@@ -75,12 +76,14 @@ def get_if_exists(ch):
 F3, F4, O1, O2 = [get_if_exists(x) for x in ['F3', 'F4', 'O1', 'O2']]
 
 # Calculate standard metrics
-FAA = safe_log(F4) - safe_log(F3)
-OAA = safe_log(O2) - safe_log(O1)
-OASI = (O1 + O2) / 2
+FAA = safe_log(F4) - safe_log(F3)  # Frontal Asymmetry (FASI)
+OAA = safe_log(O2) - safe_log(O1)  # Occipital Asymmetry
+OASI = (O1 + O2) / 2               # Occipital Avg Power (OAP)
+FAP = (F3 + F4) / 2                # Frontal Avg Power
 
 metrics = {
     'FAA': FAA,
+    'FAP': FAP,
     'OAA': OAA,
     'OASI': OASI
 }
@@ -95,13 +98,13 @@ pd.DataFrame([metrics]).to_csv(csv_path, index=False)
 print(f"Feature CSV saved to: {csv_path}")
 
 # Simple bar plot summary
-plt.figure(figsize=(6, 4))
-colors = ['tomato', 'royalblue', 'mediumseagreen']
+plt.figure(figsize=(7, 4)) # slightly wider figure
+colors = ['tomato', 'royalblue', 'mediumseagreen', 'orange'] # added color
 plt.bar(metrics.keys(), metrics.values(), color=colors)
 plt.title(f"EEG Feature Summary ({testcase_name})")
-plt.ylabel("Value (log-scaled differences)")
+plt.ylabel("Value") # updated label as not all are log-scaled
 
-plt.ylim(-2.5, 2.5)
+plt.ylim(-1.5, 2.0)
 
 plt.grid(alpha=0.3, linestyle='--')
 plt.tight_layout()
