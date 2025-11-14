@@ -119,7 +119,7 @@ def create_comparison_plot():
     plt.xlabel('testcase', fontsize=12)
     
     # set fixed Y-axis (slightly taller for labels)
-    plt.ylim(-0.5, 2.7)
+    plt.ylim(-1.5, 2.0)
     
     # rotate x-axis labels to be horizontal
     plt.xticks(rotation=0, fontsize=11)
