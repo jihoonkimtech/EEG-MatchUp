@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 
-target_folder = os.path.join(script_dir, "../raw/120s/")
+target_folder = os.path.join(script_dir, "../raw/challenge/")
 folder_name = os.path.basename(os.path.normpath(target_folder))
 
 file_list = glob.glob(os.path.join(target_folder, "*.mat"))
@@ -68,6 +68,8 @@ if not raw_list:
 else:
     print(f"\n--- {len(raw_list)}개의 파일을 하나로 통합합니다 ---")
     raw_combined = mne.concatenate_raws(raw_list)
+    raw_combined.crop(tmin=40)
+    print(f"Cropped data: Starting from 40s. New duration: {raw_combined.times[-1]:.2f}s")
 
 
     print(f"통합된 데이터 정보: {raw_combined.info}")

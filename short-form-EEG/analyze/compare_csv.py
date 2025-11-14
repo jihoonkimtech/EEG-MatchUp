@@ -2,19 +2,14 @@ import os
 import glob
 import pandas as pd
 import matplotlib.pyplot as plt
-import numpy as np  # added for precise float comparison (isclose)
+import numpy as np
 
-# ----------------------------------------------------------
 # EEG Feature Comparator
 # Reads all 'EEG_features_...csv' files in the directory
-# and creates a single comparison plot.
-#
-# [NEW] Adds labels to each bar.
-# [NEW] Highlights min/max for each metric.
-# ----------------------------------------------------------
+# Creates a comparison plot AND saves a combined CSV.
 
 def create_comparison_plot():
-    print("--- Starting Feature Comparison Plot ---")
+    print("--- Starting Feature Comparison ---")
     
     # find all feature CSV files in the current directory
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -32,8 +27,10 @@ def create_comparison_plot():
     # read each CSV and combine them
     for f in csv_files:
         # extract testcase name from filename
-        # e.g., 'EEG_features_120s.csv' -> '120s'
         file_name = os.path.basename(f)
+        if file_name.startswith("EEG_features_COMBINED"):
+            continue
+            
         testcase_name = file_name.replace("EEG_features_", "").replace(".csv", "")
         
         print(f"  - Reading '{file_name}' (testcase: {testcase_name})")
@@ -55,7 +52,16 @@ def create_comparison_plot():
     print(combined_df)
     print("---------------------\n")
 
-    # --- Create the grouped bar plot ---
+    # Save combined data to CSV
+    output_csv_filename = os.path.join(script_dir, "EEG_features_COMBINED_data.csv")
+    try:
+        combined_df.to_csv(output_csv_filename)
+        print(f"Combined data saved to: {output_csv_filename}\n")
+    except Exception as e:
+        print(f"*** ERROR: Could not save combined CSV file. ***\n{e}\n")
+    # End of new section
+
+    # Create the grouped bar plot
     ax = combined_df.plot(
         kind='bar', 
         figsize=(12, 7), 
@@ -63,14 +69,12 @@ def create_comparison_plot():
         edgecolor='black'
     )
     
-    # --- [NEW] Add text labels and highlight Min/Max ---
-    
     # get min/max values for each metric
     min_vals = combined_df.min()
     max_vals = combined_df.max()
     metrics = combined_df.columns # e.g., ['FAA', 'OAA', 'OASI']
 
-    # iterate through each metric's container (e.g., all FAA bars, then all OAA bars)
+    # iterate through each metric's container
     for i, container in enumerate(ax.containers):
         metric_name = metrics[i]
         min_val = min_vals[metric_name]
@@ -93,7 +97,7 @@ def create_comparison_plot():
                 label_color = 'red'
                 label_weight = 'bold'
 
-            # set vertical offset based on sign (positive/negative bar)
+            # set vertical offset
             v_offset = 3 if height >= 0 else -3
             vertical_align = 'bottom' if height >= 0 else 'top'
 
@@ -107,35 +111,28 @@ def create_comparison_plot():
                 va=vertical_align,
                 color=label_color,
                 weight=label_weight,
-                fontsize=8 # small font to prevent overlap
+                fontsize=8 
             )
-    
-    # --- End of new section ---
     
     plt.title('EEG Feature Comparison by testcase', fontsize=16)
     plt.ylabel('Value', fontsize=12)
     plt.xlabel('testcase', fontsize=12)
     
-    # [MODIFIED] set fixed Y-axis (slightly taller for labels)
+    # set fixed Y-axis (slightly taller for labels)
     plt.ylim(-0.5, 2.7)
     
     # rotate x-axis labels to be horizontal
     plt.xticks(rotation=0, fontsize=11)
-    
-    # add grid
     plt.grid(axis='y', linestyle='--', alpha=0.7)
-    
-    # place legend outside the plot
     plt.legend(title='Metrics', bbox_to_anchor=(1.02, 1), loc='upper left')
-    
-    plt.tight_layout() # adjust plot to prevent labels from overlapping
+    plt.tight_layout() 
     
     # save the final comparison image
     output_filename = os.path.join(script_dir, "EEG_features_COMPARISON.png")
     plt.savefig(output_filename)
     
     print(f"Comparison plot saved to: {output_filename}")
-    # plt.show() # prevent popup window
+    plt.show() 
 
 # run the function
 if __name__ == "__main__":

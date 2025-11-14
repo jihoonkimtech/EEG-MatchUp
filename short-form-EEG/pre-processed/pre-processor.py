@@ -74,8 +74,8 @@ print(f"Channels renamed. Final channels: {raw.ch_names}")
 # 60Hz notch + 0.5~35Hz band pass
 print("\nApplying filters...")
 raw.notch_filter(freqs=[60])
-raw.filter(l_freq=0.5, h_freq=35)
-print("Filtering complete (0.5–35 Hz, notch 60 Hz)")
+raw.filter(l_freq=1, h_freq=45)
+print("Filtering complete (1–45 Hz, notch 60 Hz)")
 
 # Average Reference
 print("\nApplying average reference...")

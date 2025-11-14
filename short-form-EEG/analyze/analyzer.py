@@ -12,7 +12,7 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 target_folder = os.path.join(script_dir, "../pre-processed/")
 
 
-testcase_name = "info"
+testcase_name = "base"
 file_name = f'pre-processed_{testcase_name}.fif'
 input_file = os.path.join(target_folder, file_name)
 
@@ -22,6 +22,9 @@ print(f"--- Starting Feature Extraction: '{testcase_name}' ---")
 try:
     raw = mne.io.read_raw_fif(input_file, preload=True)
     print(f"Loaded file: {input_file}")
+
+    raw.crop(tmin=25)
+    print(f"Cropped data: Starting from 25s. New duration: {raw.times[-1]:.2f}s")
 except FileNotFoundError:
     raise FileNotFoundError(f"*** ERROR: cannot find file ***\n{input_file}")
 
@@ -80,7 +83,7 @@ plt.figure(figsize=(6,4))
 plt.bar(metrics.keys(), metrics.values(), color=['tomato','royalblue','mediumseagreen','orange'])
 plt.title(f"EEG Feature Summary ({testcase_name})")
 plt.ylabel("Value (log-scaled differences)")
-plt.ylim(-0.5, 2.5)
+plt.ylim(-0.2, 1.6)
 plt.grid(alpha=0.3, linestyle='--')
 plt.tight_layout()
 
