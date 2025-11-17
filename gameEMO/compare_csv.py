@@ -120,8 +120,15 @@ def create_average_comparison_plot():
     )
     
     # get min/max values for each metric
-    metric_columns = [col for col in ['FAA', 'FAP', 'OAA', 'OASI'] if col in combined_df.columns]
+    metric_columns = [col for col in ['FAA', 'FAP', 'OASI', 'TBR'] if col in combined_df.columns]
     
+    ax = combined_df[metric_columns].plot(
+        kind='bar', 
+        figsize=(12, 7), 
+        width=0.8, 
+        edgecolor='black'
+    )
+
     min_vals = combined_df[metric_columns].min()
     max_vals = combined_df[metric_columns].max()
 
