@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 # ----------------------------------------------------------
 
 # User Configuration
-TESTCASE = "G4-Control"
+TESTCASE = "G1-Tranquility"
 # --- [NEW] Check if TESTCASE is provided as command-line argument ---
 if len(sys.argv) > 1:
     TESTCASE = sys.argv[1]
@@ -30,7 +30,7 @@ PSD_FMAX = 45.0
 
 # input folder path containing .mat files (relative to this script)
 script_dir = os.path.dirname(os.path.abspath(__file__)) if '__file__' in locals() else '.'
-INPUT_FOLDER_NAME = os.path.join(script_dir, "pre-processed", TESTCASE)
+INPUT_FOLDER_NAME = os.path.join(script_dir, "preprocessed", TESTCASE)
 OUTPUT_FOLDER_NAME = os.path.join(script_dir, "analyze", TESTCASE)
 CSV_FOLDER_NAME = os.path.join(script_dir, "analyze", "Summary")
 
