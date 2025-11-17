@@ -14,7 +14,7 @@ def create_average_comparison_plot():
     analysis_dir = os.path.join(script_dir, ANALYSIS_FOLDER)
 
     # find all subject-specific csv files
-    csv_pattern = os.path.join(analysis_dir, '*-asymmetry_metrics.csv')
+    csv_pattern = os.path.join(analysis_dir, '*-all_metrics.csv')
     csv_files = glob.glob(csv_pattern)
 
     if not csv_files:
@@ -49,7 +49,7 @@ def create_average_comparison_plot():
     # --- 2. 음악별 통계 계산 ---
     print("Calculating averages by song name (across all subjects)...")
     
-    metric_columns = ['FAA', 'FAP', 'OAA', 'OASI']
+    metric_columns = ['FAA', 'FAP', 'OASI', 'TBR']
     
     # (B) group by song name, calculate mean for all 4 metrics
     summary_df = all_data_df.groupby('song_name')[metric_columns].mean()
@@ -67,7 +67,7 @@ def create_average_comparison_plot():
     # --- 3. [PLOT 1] 비대칭 (FAA, OAA) 플롯 생성 ---
     print("Generating Asymmetry (FAA, OAA) plot...")
     try:
-        plot_metrics_asymm = ['FAA', 'OAA']
+        plot_metrics_asymm = ['FAA']
         
         fig, ax = plt.subplots(figsize=(16, 8))
         
@@ -115,7 +115,7 @@ def create_average_comparison_plot():
         plt.ylabel('Asymmetry Value (ln(R)-ln(L))', fontsize=12)
         plt.xlabel('Song Name', fontsize=12)
         
-        plt.ylim(-0.1, 0.1) 
+        plt.ylim(-0.03, 0.03) 
         
         plt.xticks(rotation=45, ha='right', fontsize=9)
         plt.grid(axis='y', linestyle='--', alpha=0.7)
@@ -190,6 +190,72 @@ def create_average_comparison_plot():
         plt.tight_layout() 
         
         output_filename = os.path.join(analysis_dir, "ALL_SUBJECTS_PLOT_2_LogPower.png")
+        plt.savefig(output_filename)
+        plt.close(fig)
+        print(f"Log Power summary plot saved to: {output_filename}")
+        
+    except Exception as e:
+        print(f"    Warning: Could not generate Log Power plot. Error: {e}")
+
+    # TBR
+    print("Generating Log Power (FAP, OASI) plot...")
+    try:
+        plot_metrics_power = ['TBR']
+        
+        fig, ax = plt.subplots(figsize=(16, 8))
+        
+        # (A) plot only FAP and OASI
+        summary_df[plot_metrics_power].plot(kind='bar', ax=ax, width=0.8)
+        
+        # (B) find min/max for label styling (only for these 2 metrics)
+        min_vals = summary_df[plot_metrics_power].min()
+        max_vals = summary_df[plot_metrics_power].max()
+
+        # (C) iterate containers (FAP, OASI)
+        for i, container in enumerate(ax.containers):
+            metric_name = plot_metrics_power[i]
+            min_val = min_vals[metric_name]
+            max_val = max_vals[metric_name]
+
+            # (D) apply styling (copied from user)
+            for bar in container:
+                height = bar.get_height()
+                if pd.isna(height): continue
+                label_text = f"{height:.3f}"
+                label_color = 'black'
+                label_weight = 'normal'
+
+                if np.isclose(height, max_val):
+                    label_color = 'green'
+                    label_weight = 'bold'
+                elif np.isclose(height, min_val):
+                    label_color = 'red'
+                    label_weight = 'bold'
+
+                v_offset = 3 # all values are negative, so offset is fixed
+                vertical_align = 'bottom' # 
+
+                ax.annotate(
+                    label_text,
+                    xy=(bar.get_x() + bar.get_width() / 2, height),
+                    xytext=(0, v_offset), textcoords="offset points",
+                    ha='center', va=vertical_align,
+                    color=label_color, weight=label_weight, fontsize=8 
+                )
+        
+        # (E) set title and labels
+        plt.title(f'EEG TBR Feature Comparison (All Subjects, n={num_subjects})', fontsize=16)
+        plt.ylabel('Avg TBR', fontsize=12)
+        plt.xlabel('Song Name', fontsize=12)
+        
+        plt.ylim(-0.02, 0.05) 
+        
+        plt.xticks(rotation=45, ha='right', fontsize=9)
+        plt.grid(axis='y', linestyle='--', alpha=0.7)
+        plt.legend(title='Metrics', bbox_to_anchor=(1.02, 1), loc='upper left')
+        plt.tight_layout() 
+        
+        output_filename = os.path.join(analysis_dir, "ALL_SUBJECTS_PLOT_3_TBR.png")
         plt.savefig(output_filename)
         plt.close(fig)
         print(f"Log Power summary plot saved to: {output_filename}")
