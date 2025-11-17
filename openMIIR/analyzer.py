@@ -6,7 +6,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 
-SUBJECT = 'P14' 
+SUBJECT = 'P01' 
 PREPROCESSED_FOLDER = 'preprocessed'
 ANALYSIS_FOLDER = 'analyze'
 
@@ -97,13 +97,14 @@ analysis_dir = os.path.join(script_dir, ANALYSIS_FOLDER)
 
 # --- [NEW] Create subfolders for plots ---
 analysis_topo_dir = os.path.join(analysis_dir, 'topomaps')
-analysis_psd_dir = os.path.join(analysis_dir, 'psd_curves')
+analysis_psd_dir = os.path.join(analysis_dir, 'summary_psd_curves')
+analysis_psd_dir_per_song = os.path.join(analysis_dir, 'psd_curves')
 os.makedirs(analysis_dir, exist_ok=True)
 os.makedirs(analysis_topo_dir, exist_ok=True)
 os.makedirs(analysis_psd_dir, exist_ok=True)
 print(f"Analysis output folder created at: ./{ANALYSIS_FOLDER}/")
 print(f"  (saving topomaps to ./topomaps/)")
-print(f"  (saving PSD curves to ./psd_curves/)")
+print(f"  (saving PSD curves to ./summary_psd_curves/)")
 # -----------------------------------------
 
 input_epochs_file = os.path.join(preprocessed_dir, f'{SUBJECT}-preprocessed-epo.fif')
@@ -133,6 +134,49 @@ FRONTAL_RIGHT = ['F4']
 OCCIPITAL_LEFT = ['O1']
 OCCIPITAL_RIGHT = ['O2']
 KEY_CHANNELS = ['F3', 'F4', 'O1', 'O2']
+
+all_results = []
+print(f"\n--- Starting Per-Song Analysis (Bands: T={THETA_BAND}, A={ALPHA_BAND}, B={BETA_BAND} Hz) ---")
+
+# --- [NEW] 3.5. 전체 통합 PSD 계산 및 플롯 ---
+print(f"\n--- Calculating Unified PSD for ALL {len(epochs)} epochs ---")
+try:
+    # (A) Calculate PSD for ALL epochs combined
+    spectrum_all = epochs.compute_psd(
+        method='welch',
+        fmin=PSD_FMIN,
+        fmax=PSD_FMAX,
+        picks=epochs.ch_names,
+        n_jobs=-1,
+        n_fft=128 
+    )
+    psds_all_avg = spectrum_all.get_data().mean(axis=0) # (n_channels, n_freqs)
+    freqs_all = spectrum_all.freqs
+    ch_names_all = epochs.ch_names
+    
+    # (B) Plot unified PSD Curve
+    plt.figure(figsize=(10, 6))
+    channels_to_plot = [ch for ch in KEY_CHANNELS if ch in ch_names_all]
+    for ch in channels_to_plot:
+        ch_idx = ch_names_all.index(ch)
+        plt.plot(freqs_all, 10 * np.log10(psds_all_avg[ch_idx, :]), label=ch)
+    
+    plt.xlabel('Frequency (Hz)')
+    plt.ylabel('Power Spectral Density (dB/Hz)')
+    plt.title(f'PSD Curves - ALL MUSIC ({SUBJECT})') # Unified Title
+    plt.legend()
+    plt.grid(alpha=0.5, linestyle='--')
+    plt.tight_layout()
+    
+    psd_curve_img_path = os.path.join(analysis_psd_dir, f"{SUBJECT}_ALL_MUSIC_psd_curve.png")
+    plt.savefig(psd_curve_img_path)
+    plt.close()
+    print(f"  Saved unified PSD curve plot to: {psd_curve_img_path}")
+
+except Exception as e:
+    print(f"    Warning: Could not generate unified PSD curve plot. Error: {e}")
+# -----------------------------------------------
+
 
 all_results = []
 print(f"\n--- Starting Per-Song Analysis (Bands: T={THETA_BAND}, A={ALPHA_BAND}, B={BETA_BAND} Hz) ---")
@@ -196,7 +240,7 @@ for song_tag in song_tags:
             plt.grid(alpha=0.5, linestyle='--')
             plt.tight_layout()
             
-            psd_curve_img_path = os.path.join(analysis_psd_dir, f"{SUBJECT}_{song_name}_psd_curve.png")
+            psd_curve_img_path = os.path.join(analysis_psd_dir_per_song, f"{SUBJECT}_{song_name}_psd_curve.png")
             plt.savefig(psd_curve_img_path)
             plt.close()
         except Exception as e:
@@ -216,7 +260,7 @@ for song_tag in song_tags:
         metrics = {
             'song_name': song_name,
             'testcase': song_tag, 
-            'FAA': FAA, 'FAP': FAP, 'OAA': OAA, 'OASI': OASI, 'TBR': TBR
+            'FAA': FAA, 'FAP': FAP, 'OASI': OASI, 'TBR': TBR
         }
         all_results.append(metrics)
 
@@ -239,7 +283,7 @@ if all_results:
     # --- [플롯 1] 비대칭 (FAA, OAA) Subplots 생성 ---
     print("Generating Asymmetry (FAA, OAA) plot...")
     try:
-        plot_metric_keys = ['FAA', 'OAA']
+        plot_metric_keys = ['FAA']
         num_songs = len(results_df)
         ncols = 4
         nrows = int(np.ceil(num_songs / ncols))
@@ -260,7 +304,7 @@ if all_results:
             ax.set_ylabel("Asymmetry Value (ln(R)-ln(L))")
             ax.grid(alpha=0.3, linestyle='--')
             ax.axhline(0, color='black', linewidth=0.8)
-            ax.set_ylim(-0.15, 0.15) # slightly wider range
+            ax.set_ylim(-0.05, 0.05) # slightly wider range
             
             for bar in bars:
                 yval = bar.get_height()
@@ -275,7 +319,7 @@ if all_results:
         fig.suptitle(f"Per-Song Asymmetry Metrics ({SUBJECT}) - Alpha Band", fontsize=16)
         fig.tight_layout(rect=[0, 0.03, 1, 0.95])
         
-        img_path = os.path.join(analysis_dir, f"{SUBJECT}-PLOT_1_Asymmetry (FAA,OAA).png")
+        img_path = os.path.join(analysis_dir, f"{SUBJECT}-PLOT_1_Asymmetry (FAA).png")
         plt.savefig(img_path)
         plt.close(fig)
         print(f"  Saved Asymmetry plot to: {img_path}")
@@ -355,7 +399,7 @@ if all_results:
         global_min = results_df[plot_metric_keys].min().min()
         global_max = results_df[plot_metric_keys].max().max()
         padding = (global_max - global_min) * 0.1
-        ylim = (global_min - padding, global_max + padding + 0.1) # add extra top padding for label
+        #ylim = (global_min - padding, global_max + padding + 0.1) # add extra top padding for label
 
         for i, (index, row) in enumerate(results_df.iterrows()):
             ax = ax_flat[i]
@@ -368,7 +412,7 @@ if all_results:
             ax.set_ylabel("Frontal TBR (Theta/Beta)")
             ax.grid(alpha=0.3, linestyle='--')
             
-            ax.set_ylim(ylim) # set consistent y-axis
+            ax.set_ylim(-0.1, 0.1) # set consistent y-axis
             
             for bar in bars:
                 yval = bar.get_height()
