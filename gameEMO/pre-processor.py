@@ -5,14 +5,14 @@ from scipy.io import loadmat
 import matplotlib.pyplot as plt 
 
 # User Configuration
-TESTCASE = "G3-Horror"
+TESTCASE = "G1-Tranquility"
 
 # input folder path containing .mat files (relative to this script)
 INPUT_FOLDER_NAME = f"./eeg/{TESTCASE}"
 
 # output folder name to save Epochs(.fif) files (relative to this script)
-# analyzer.py looks for ../pre-processed/, so we set this to "pre-processed".
-OUTPUT_FOLDER_NAME = f"./pre-processed/{TESTCASE}"
+# analyzer.py looks for ../pre-processed/, so we set this to "preprocessed".
+OUTPUT_FOLDER_NAME = f"./preprocessed/{TESTCASE}"
 
 # (e.g., 250, 256, 500, 1000...)
 # This will be applied to ALL .mat files.
@@ -25,7 +25,7 @@ SFREQ = 600  # <--- Enter the correct sampling frequency here.
 DATA_SCALING_FACTOR = 1.0
 
 # duration (in seconds) for splitting data into epochs
-EPOCH_DURATION_SEC = 20.0
+EPOCH_DURATION_SEC = 9.0
 
 # list of channel names to extract from the .mat files
 # this list will be applied to all files in the folder
@@ -82,12 +82,25 @@ def process_single_mat_file(mat_path, testcase_name, output_folder):
 
         # --- 3. Apply Pre-processing (similar to pre-processor.py) ---
         # 60Hz notch + 1~45Hz band pass
-        #raw.notch_filter(freqs=[60], verbose=False)
-        #raw.filter(l_freq=1, h_freq=45, verbose=False)
+        raw.notch_filter(freqs=[60], verbose=False)
+        raw.filter(l_freq=1, h_freq=45, verbose=False)
         
         # average Reference
-        #raw.set_eeg_reference(ref_channels='average', verbose=False)
+        raw.set_eeg_reference(ref_channels='average', verbose=False)
         #print("Filtering (1-45Hz, 60Hz notch) and Average reference applied.")
+        
+        print(f"Cropping data: Removing first 10s and last 10s...")
+        original_duration = raw.times.max()
+
+        tmin_to_keep = 10.0
+        tmax_to_keep = original_duration - 10.0
+
+        # ensure data is long enough to be cropped
+        if tmax_to_keep > tmin_to_keep:
+            raw.crop(tmin=tmin_to_keep, tmax=tmax_to_keep, include_tmax=True)
+            print(f"Original duration: {original_duration:.2f}s. New duration: {raw.times.max():.2f}s")
+        else:
+            print(f"Warning: Data duration ({original_duration:.2f}s) is too short to remove 20s. Skipping crop.")
 
         # --- 4. Save Plots (from raw object) ---
 
