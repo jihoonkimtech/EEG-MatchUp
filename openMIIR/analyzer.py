@@ -6,11 +6,11 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 
-SUBJECT = 'P01' 
+SUBJECT = 'P11' 
 PREPROCESSED_FOLDER = 'preprocessed'
-ANALYSIS_FOLDER = 'analyze'
+ANALYSIS_FOLDER = 'analyze' # <-- [수정] 결과 폴더 이름 변경
 
-# --- [NEW] Define all frequency bands ---
+# --- Define all frequency bands ---
 THETA_BAND = (4.0, 8.0)
 ALPHA_BAND = (8.0, 13.0)
 BETA_BAND = (13.0, 30.0)
@@ -95,13 +95,14 @@ script_dir = os.path.dirname(os.path.abspath(__file__)) if '__file__' in locals(
 preprocessed_dir = os.path.join(script_dir, PREPROCESSED_FOLDER)
 analysis_dir = os.path.join(script_dir, ANALYSIS_FOLDER)
 
-# --- [NEW] Create subfolders for plots ---
+# --- Create subfolders for plots ---
 analysis_topo_dir = os.path.join(analysis_dir, 'topomaps')
 analysis_psd_dir = os.path.join(analysis_dir, 'summary_psd_curves')
-analysis_psd_dir_per_song = os.path.join(analysis_dir, 'psd_curves')
+analysis_psd_dir_per_group = os.path.join(analysis_dir, 'psd_curves_per_group') # <-- [수정]
 os.makedirs(analysis_dir, exist_ok=True)
 os.makedirs(analysis_topo_dir, exist_ok=True)
 os.makedirs(analysis_psd_dir, exist_ok=True)
+os.makedirs(analysis_psd_dir_per_group, exist_ok=True) # <-- [수정]
 print(f"Analysis output folder created at: ./{ANALYSIS_FOLDER}/")
 print(f"  (saving topomaps to ./topomaps/)")
 print(f"  (saving PSD curves to ./summary_psd_curves/)")
@@ -124,8 +125,15 @@ if not expected_channels.issubset(set(epochs.ch_names)):
     print(f"Error: Epochs file missing required channels! Got: {epochs.ch_names}, Expected: {expected_channels}")
     sys.exit(1)
 
-song_tags = list(epochs.event_id.keys())
-print(f"Loaded epochs with {len(song_tags)} event types (songs).")
+# --- [수정] 개별 노래 태그 대신, 기본 그룹 태그를 추출합니다 ---
+# e.g., 'Resting/SongA' -> 'Resting'
+# e.g., 'Excited/SongB' -> 'Excited'
+all_event_keys = list(epochs.event_id.keys())
+base_groups = sorted(list(set([key.split('/')[0] for key in all_event_keys])))
+# -------------------------------------------------------------
+
+print(f"Loaded epochs with {len(all_event_keys)} event types, grouped into {len(base_groups)} base groups.")
+print(f"Found Groups: {base_groups}")
 
 
 # --- 3. 음악별 비대칭성 분석 ---
@@ -138,7 +146,7 @@ KEY_CHANNELS = ['F3', 'F4', 'O1', 'O2']
 all_results = []
 print(f"\n--- Starting Per-Song Analysis (Bands: T={THETA_BAND}, A={ALPHA_BAND}, B={BETA_BAND} Hz) ---")
 
-# --- [NEW] 3.5. 전체 통합 PSD 계산 및 플롯 ---
+# --- 3.5. 전체 통합 PSD 계산 및 플롯 ---
 print(f"\n--- Calculating Unified PSD for ALL {len(epochs)} epochs ---")
 try:
     # (A) Calculate PSD for ALL epochs combined
@@ -179,27 +187,29 @@ except Exception as e:
 
 
 all_results = []
-print(f"\n--- Starting Per-Song Analysis (Bands: T={THETA_BAND}, A={ALPHA_BAND}, B={BETA_BAND} Hz) ---")
+print(f"\n--- Starting Per-GROUP Analysis (Groups: {base_groups}) ---")
 
-for song_tag in song_tags:
-    print(f"Processing: {song_tag}")
+# --- [수정] 개별 노래(song_tag)가 아닌 그룹(group_name)으로 반복합니다 ---
+for group_name in base_groups:
+    print(f"Processing Group: {group_name}")
     
     try:
-        song_epochs = epochs[song_tag]
-        if len(song_epochs) == 0:
-            print("  Skipping (no epochs found for this tag).")
+        # MNE는 'Excited'라고만 선택해도 'Excited/...'로 시작하는 모든 태그를 선택합니다.
+        group_epochs = epochs[group_name]
+        if len(group_epochs) == 0:
+            print("  Skipping (no epochs found for this group).")
             continue
     except KeyError:
-        print(f"  Skipping (KeyError): {song_tag}")
+        print(f"  Skipping (KeyError): {group_name}")
         continue
     
-    # clean song name for file paths
-    song_name = song_tag.split('/', 1)[-1].replace(' ', '_').replace('/', '_')
+    # clean group name for file paths
+    clean_group_name = group_name.replace(' ', '_').replace('/', '_')
         
-    print(f"  Calculating PSD for {len(song_epochs)} epochs...")
+    print(f"  Calculating PSD for {len(group_epochs)} epochs in group '{group_name}'...")
     try:
         # (A) Calculate PSD for a WIDE range (1-45Hz)
-        spectrum = song_epochs.compute_psd(
+        spectrum = group_epochs.compute_psd(
             method='welch',
             fmin=PSD_FMIN,
             fmax=PSD_FMAX,
@@ -212,20 +222,20 @@ for song_tag in song_tags:
         
         # average PSD across epochs
         psds_avg = psds.mean(axis=0) # (n_channels, n_freqs)
-        ch_names = song_epochs.ch_names
+        ch_names = group_epochs.ch_names
 
-        # --- [NEW PLOT 1: Per-Song Topomap] ---
+        # --- [PLOT 1: Per-Group Topomap] ---
         try:
             topo_fig = spectrum.plot_topomap(bands=ALL_BANDS, ch_type='eeg', show=False, vlim=(None, None))
-            topo_fig.suptitle(f'Topomap - {song_name}', fontsize=14)
-            topo_img_path = os.path.join(analysis_topo_dir, f"{SUBJECT}_{song_name}_topo.png")
+            topo_fig.suptitle(f'Topomap - {group_name}', fontsize=14) # <-- [수정]
+            topo_img_path = os.path.join(analysis_topo_dir, f"{SUBJECT}_{clean_group_name}_topo.png") # <-- [수정]
             topo_fig.savefig(topo_img_path)
             plt.close(topo_fig)
         except Exception as e:
-            print(f"    Warning: Could not generate topomap plot for {song_name}. Error: {e}")
+            print(f"    Warning: Could not generate topomap plot for {group_name}. Error: {e}")
         # ----------------------------------------
 
-        # --- [NEW PLOT 2: Per-Song PSD Curve] ---
+        # --- [PLOT 2: Per-Group PSD Curve] ---
         try:
             plt.figure(figsize=(10, 6))
             channels_to_plot = [ch for ch in KEY_CHANNELS if ch in ch_names]
@@ -235,16 +245,16 @@ for song_tag in song_tags:
             
             plt.xlabel('Frequency (Hz)')
             plt.ylabel('Power Spectral Density (dB/Hz)')
-            plt.title(f'PSD Curves - {song_name}')
+            plt.title(f'PSD Curves - {group_name}') # <-- [수정]
             plt.legend()
             plt.grid(alpha=0.5, linestyle='--')
             plt.tight_layout()
             
-            psd_curve_img_path = os.path.join(analysis_psd_dir_per_song, f"{SUBJECT}_{song_name}_psd_curve.png")
+            psd_curve_img_path = os.path.join(analysis_psd_dir_per_group, f"{SUBJECT}_{clean_group_name}_psd_curve.png") # <-- [수정]
             plt.savefig(psd_curve_img_path)
             plt.close()
         except Exception as e:
-            print(f"    Warning: Could not generate PSD curve plot for {song_name}. Error: {e}")
+            print(f"    Warning: Could not generate PSD curve plot for {group_name}. Error: {e}")
         # ----------------------------------------
 
         # (B) Calculate Alpha Asymmetry metrics
@@ -258,53 +268,69 @@ for song_tag in song_tags:
 
         # (D) Store results
         metrics = {
-            'song_name': song_name,
-            'testcase': song_tag, 
+            'group_name': group_name, # <-- [수정]
             'FAA': FAA, 'FAP': FAP, 'OASI': OASI, 'TBR': TBR
         }
         all_results.append(metrics)
 
     except Exception as e:
-        print(f"    Error calculating PSD/Metrics for {song_name}: {e}")
+        print(f"    Error calculating PSD/Metrics for {group_name}: {e}")
 
 
 # --- 4. 최종 결과 저장 (CSV 및 3개의 분리된 플롯) ---
 if all_results:
-    output_csv_file = os.path.join(analysis_dir, f'{SUBJECT}-all_metrics.csv')
+    output_csv_file = os.path.join(analysis_dir, f'{SUBJECT}-GROUP_all_metrics.csv') # <-- [수정]
     print(f"\n--- Saving all results to: {output_csv_file} ---")
     
     # (A) DataFrame 생성 및 CSV 저장
     results_df = pd.DataFrame(all_results)
-    # sort by song_name for consistent plotting
-    results_df = results_df.sort_values(by='song_name').reset_index(drop=True)
+    # sort by group_name for consistent plotting
+    results_df = results_df.sort_values(by='group_name').reset_index(drop=True) # <-- [수정]
     results_df.to_csv(output_csv_file, index=False)
     print(results_df.head())
+
+    # --- [수정] 플롯 레이아웃을 그룹 수에 맞게 동적으로 변경 ---
+    num_groups = len(results_df)
+    if num_groups == 0:
+        print("\n--- No results to plot. ---")
+        sys.exit()
+        
+    # 1xN (e.g., 1x4) 레이아웃으로 변경
+    ncols = num_groups
+    nrows = 1
+    plot_width = ncols * 4.5
+    plot_height = nrows * 4.0
+    # ----------------------------------------------------
+
 
     # --- [플롯 1] 비대칭 (FAA, OAA) Subplots 생성 ---
     print("Generating Asymmetry (FAA, OAA) plot...")
     try:
         plot_metric_keys = ['FAA']
-        num_songs = len(results_df)
-        ncols = 4
-        nrows = int(np.ceil(num_songs / ncols))
         
         fig, axes = plt.subplots(nrows=nrows, ncols=ncols, 
-                                 figsize=(ncols * 4, nrows * 3.5), 
+                                 figsize=(plot_width, plot_height), # <-- [수정]
                                  squeeze=False)
         ax_flat = axes.flatten()
 
+        # [수정] 고정된 Y축 대신 동적 Y축 사용
+        global_min = results_df[plot_metric_keys].min().min()
+        global_max = results_df[plot_metric_keys].max().max()
+        padding = (global_max - global_min) * 0.1 + 0.01 # add a small fixed pad
+        ylim = (global_min - padding, global_max + padding)
+
         for i, (index, row) in enumerate(results_df.iterrows()):
             ax = ax_flat[i]
-            song_name = row['song_name']
+            group_name = row['group_name'] # <-- [수정]
             metrics = row[plot_metric_keys]
             
             bars = ax.bar(metrics.index, metrics.values, color=['tomato', 'royalblue'])
             
-            ax.set_title(song_name, fontsize=10)
+            ax.set_title(group_name, fontsize=10) # <-- [수정]
             ax.set_ylabel("Asymmetry Value (ln(R)-ln(L))")
             ax.grid(alpha=0.3, linestyle='--')
             ax.axhline(0, color='black', linewidth=0.8)
-            ax.set_ylim(-0.05, 0.05) # slightly wider range
+            ax.set_ylim(ylim) # <-- [수정]
             
             for bar in bars:
                 yval = bar.get_height()
@@ -316,10 +342,10 @@ if all_results:
         for j in range(i + 1, len(ax_flat)):
             ax_flat[j].axis('off')
 
-        fig.suptitle(f"Per-Song Asymmetry Metrics ({SUBJECT}) - Alpha Band", fontsize=16)
+        fig.suptitle(f"Per-Group Asymmetry Metrics ({SUBJECT}) - Alpha Band", fontsize=16) # <-- [수정]
         fig.tight_layout(rect=[0, 0.03, 1, 0.95])
         
-        img_path = os.path.join(analysis_dir, f"{SUBJECT}-PLOT_1_Asymmetry (FAA).png")
+        img_path = os.path.join(analysis_dir, f"{SUBJECT}-PLOT_1_GROUP_Asymmetry (FAA).png") # <-- [수정]
         plt.savefig(img_path)
         plt.close(fig)
         print(f"  Saved Asymmetry plot to: {img_path}")
@@ -333,12 +359,8 @@ if all_results:
     try:
         plot_metric_keys = ['FAP', 'OASI'] # 파워만
         
-        num_songs = len(results_df)
-        ncols = 4
-        nrows = int(np.ceil(num_songs / ncols))
-        
         fig, axes = plt.subplots(nrows=nrows, ncols=ncols, 
-                                 figsize=(ncols * 4, nrows * 3.5), 
+                                 figsize=(plot_width, plot_height), # <-- [수정]
                                  squeeze=False)
         ax_flat = axes.flatten()
         
@@ -350,12 +372,12 @@ if all_results:
 
         for i, (index, row) in enumerate(results_df.iterrows()):
             ax = ax_flat[i]
-            song_name = row['song_name']
+            group_name = row['group_name'] # <-- [수정]
             metrics = row[plot_metric_keys]
             
             bars = ax.bar(metrics.index, metrics.values, color=['mediumseagreen', 'orange'])
             
-            ax.set_title(song_name, fontsize=10)
+            ax.set_title(group_name, fontsize=10) # <-- [수정]
             ax.set_ylabel("Avg Log Power Value ((ln(R)+ln(L))/2)")
             ax.grid(alpha=0.3, linestyle='--')
             
@@ -370,10 +392,10 @@ if all_results:
         for j in range(i + 1, len(ax_flat)):
             ax_flat[j].axis('off')
 
-        fig.suptitle(f"Per-Song Log Power Metrics ({SUBJECT}) - Alpha Band", fontsize=16)
+        fig.suptitle(f"Per-Group Log Power Metrics ({SUBJECT}) - Alpha Band", fontsize=16) # <-- [수정]
         fig.tight_layout(rect=[0, 0.03, 1, 0.95])
 
-        img_path = os.path.join(analysis_dir, f"{SUBJECT}-PLOT_2_LogPower (FAP,OASI).png")
+        img_path = os.path.join(analysis_dir, f"{SUBJECT}-PLOT_2_GROUP_LogPower (FAP,OASI).png") # <-- [수정]
         plt.savefig(img_path)
         plt.close(fig)
         print(f"  Saved Log Power plot to: {img_path}")
@@ -381,38 +403,34 @@ if all_results:
     except Exception as e:
         print(f"    Warning: Could not generate Log Power plot. Error: {e}")
 
-    # --- [NEW PLOT 3: TBR (Theta/Beta Ratio)] ---
+    # --- [PLOT 3: TBR (Theta/Beta Ratio)] ---
     print("Generating TBR (Theta/Beta Ratio) plot...")
     try:
         plot_metric_keys = ['TBR'] # TBR
         
-        num_songs = len(results_df)
-        ncols = 4
-        nrows = int(np.ceil(num_songs / ncols))
-        
         fig, axes = plt.subplots(nrows=nrows, ncols=ncols, 
-                                 figsize=(ncols * 4, nrows * 3.5), 
+                                 figsize=(plot_width, plot_height), # <-- [수정]
                                  squeeze=False)
         ax_flat = axes.flatten()
         
-        # find global min/max for TBR
+        # [수정] 고정된 Y축 대신 동적 Y축 사용
         global_min = results_df[plot_metric_keys].min().min()
         global_max = results_df[plot_metric_keys].max().max()
-        padding = (global_max - global_min) * 0.1
-        #ylim = (global_min - padding, global_max + padding + 0.1) # add extra top padding for label
+        padding = (global_max - global_min) * 0.1 + 0.01 # add a small fixed pad
+        ylim = (global_min - padding, global_max + padding)
 
         for i, (index, row) in enumerate(results_df.iterrows()):
             ax = ax_flat[i]
-            song_name = row['song_name']
+            group_name = row['group_name'] # <-- [수정]
             metrics = row[plot_metric_keys]
             
             bars = ax.bar(metrics.index, metrics.values, color=['purple'])
             
-            ax.set_title(song_name, fontsize=10)
+            ax.set_title(group_name, fontsize=10) # <-- [수정]
             ax.set_ylabel("Frontal TBR (Theta/Beta)")
             ax.grid(alpha=0.3, linestyle='--')
             
-            ax.set_ylim(-0.1, 0.1) # set consistent y-axis
+            ax.set_ylim(ylim) # <-- [수정]
             
             for bar in bars:
                 yval = bar.get_height()
@@ -423,10 +441,10 @@ if all_results:
         for j in range(i + 1, len(ax_flat)):
             ax_flat[j].axis('off')
 
-        fig.suptitle(f"Per-Song Frontal TBR ({SUBJECT})", fontsize=16)
+        fig.suptitle(f"Per-Group Frontal TBR ({SUBJECT})", fontsize=16) # <-- [수정]
         fig.tight_layout(rect=[0, 0.03, 1, 0.95])
 
-        img_path = os.path.join(analysis_dir, f"{SUBJECT}-PLOT_3_TBR.png")
+        img_path = os.path.join(analysis_dir, f"{SUBJECT}-PLOT_3_GROUP_TBR.png") # <-- [수정]
         plt.savefig(img_path)
         plt.close(fig)
         print(f"  Saved TBR plot to: {img_path}")
