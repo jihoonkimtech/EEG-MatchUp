@@ -1,5 +1,6 @@
 import os
 import glob
+import sys
 import mne
 import numpy as np
 import pandas as pd
@@ -10,7 +11,12 @@ import matplotlib.pyplot as plt
 # ----------------------------------------------------------
 
 # User Configuration
-TESTCASE = "G1-TrainSim"
+TESTCASE = "G4-Control"
+# --- [NEW] Check if TESTCASE is provided as command-line argument ---
+if len(sys.argv) > 1:
+    TESTCASE = sys.argv[1]
+    print(f"[Info] Using TESTCASE from command line: {TESTCASE}")
+# ---------------------------------------------------------------------
 
 # --- [NEW] Define bands ---
 THETA_BAND = (4.0, 8.0)
@@ -18,49 +24,59 @@ ALPHA_BAND = (8.0, 13.0)
 BETA_BAND = (13.0, 30.0)
 ALL_BANDS = {'Theta': THETA_BAND, 'Alpha': ALPHA_BAND, 'Beta': BETA_BAND}
 KEY_CHANNELS = ['F3', 'F4', 'O1', 'O2']
+PSD_FMIN = 1.0
+PSD_FMAX = 45.0
 # ---------------------------
 
 # input folder path containing .mat files (relative to this script)
-INPUT_FOLDER_NAME = f"./pre-processed/{TESTCASE}"
-OUTPUT_FOLDER_NAME = f"./analyze/{TESTCASE}"
-CSV_FOLDER_NAME = f"./analyze/Summary/"
+script_dir = os.path.dirname(os.path.abspath(__file__)) if '__file__' in locals() else '.'
+INPUT_FOLDER_NAME = os.path.join(script_dir, "pre-processed", TESTCASE)
+OUTPUT_FOLDER_NAME = os.path.join(script_dir, "analyze", TESTCASE)
+CSV_FOLDER_NAME = os.path.join(script_dir, "analyze", "Summary")
 
 
-# script_dir = os.path.dirname(os.path.abspath(__file__)) # (이미 상단에 있음)
+# --- [MODIFIED] Create output subfolders ---
+topo_output_folder = os.path.join(OUTPUT_FOLDER_NAME, 'topomaps')
+psd_output_folder = os.path.join(OUTPUT_FOLDER_NAME, 'psd_curves')
+# --- [NEW] Create summary PSD folder ---
+summary_psd_folder = os.path.join(CSV_FOLDER_NAME, 'summary_psd_curves')
+# ------------------------------------
 
-target_folder = os.path.join(script_dir, INPUT_FOLDER_NAME)
-output_folder = os.path.join(script_dir, OUTPUT_FOLDER_NAME)
-csv_folder = os.path.join(script_dir, CSV_FOLDER_NAME)
-
-# --- [NEW] Create output subfolders ---
-topo_output_folder = os.path.join(output_folder, 'topomaps')
-psd_output_folder = os.path.join(output_folder, 'psd_curves')
-os.makedirs(output_folder, exist_ok=True)
-os.makedirs(csv_folder, exist_ok=True)
+os.makedirs(OUTPUT_FOLDER_NAME, exist_ok=True)
+os.makedirs(CSV_FOLDER_NAME, exist_ok=True)
 os.makedirs(topo_output_folder, exist_ok=True)
 os.makedirs(psd_output_folder, exist_ok=True)
+# --- [NEW] ---
+os.makedirs(summary_psd_folder, exist_ok=True)
 # ------------------------------------
+
 
 REACTION_DELAY_SECONDS = 0.5
 # ----------------------------------------------------------
 
 print(f"--- Starting Batch Feature Extraction ---")
-print(f"Scanning for epoch files in: {target_folder}\n")
-print(f"(Saving Topomaps to: {topo_output_folder})")
-print(f"(Saving PSD Curves to: {psd_output_folder})\n")
+print(f"Testcase: {TESTCASE}")
+print(f"Scanning for epoch files in: {INPUT_FOLDER_NAME}")
+print(f"(Saving Individual PSD Curves to: {psd_output_folder})")
+print(f"(Saving Summary PSD Curve to: {summary_psd_folder})\n")
 
 
-epoch_files = glob.glob(os.path.join(target_folder, "*-epo.fif"))
+epoch_files = glob.glob(os.path.join(INPUT_FOLDER_NAME, "*-epo.fif"))
 
 if not epoch_files:
-    print(f"*** ERROR: No '*-epo.fif' files found in {target_folder} ***")
-    exit()
+    print(f"*** ERROR: No '*-epo.fif' files found in {INPUT_FOLDER_NAME} ***")
+    sys.exit(1) # [MODIFIED] Use sys.exit
 
 all_metrics = []
+# --- [NEW] For unified PSD plot ---
+all_psds_list = []
+all_freqs = None
+ch_names_last = None # To store channel names
+# ----------------------------------
 
 # --- [MODIFIED] Define plot metrics and colors for consistency ---
-metric_keys = ['FAA', 'FAP', 'OAA', 'OASI', 'TBR'] # Add TBR
-plot_colors = ['tomato', 'royalblue', 'mediumseagreen', 'orange', 'purple'] # Add color for TBR
+metric_keys = ['FAA', 'FAP', 'OASI', 'TBR'] # OAA Removed, OASI Restored
+plot_colors = ['tomato', 'royalblue', 'orange', 'purple'] # mediumseagreen Removed, orange Restored
 
 
 for file_path in epoch_files:
@@ -74,6 +90,9 @@ for file_path in epoch_files:
         epochs = mne.read_epochs(file_path, preload=True, verbose=False)
         print(f"Loaded {len(epochs)} epochs from: {os.path.basename(file_path)}")
         
+        # Store channel names (for final unified plot)
+        ch_names_last = epochs.ch_names
+        
         # start from 0.5s
         epochs.crop(tmin=REACTION_DELAY_SECONDS, verbose=False)
         print(f"Cropped epochs: New range {epochs.tmin}s to {epochs.tmax}s")
@@ -81,9 +100,16 @@ for file_path in epoch_files:
         # --- 2. Compute PSD ---
         n_fft = 128
         
-        spectrum = epochs.compute_psd(method='welch', fmin=1, fmax=45, n_fft=n_fft, verbose=False)
+        spectrum = epochs.compute_psd(
+            method='welch', 
+            fmin=PSD_FMIN, 
+            fmax=PSD_FMAX, 
+            n_fft=n_fft, 
+            verbose=False,
+            n_jobs=-1
+        )
 
-        # --- [NEW PLOT 1: Topomap] ---
+        # --- [NEW PLOT 1: Topomap] (Still attempted, but warnings are OK) ---
         try:
             topo_fig = spectrum.plot_topomap(bands=ALL_BANDS, ch_type='eeg', show=False, vlim=(None, None))
             topo_fig.suptitle(f'Topomap - {testcase_name}', fontsize=14)
@@ -91,19 +117,31 @@ for file_path in epoch_files:
             topo_fig.savefig(topo_img_path)
             plt.close(topo_fig)
         except Exception as e:
-            print(f"    Warning: Could not save topomap for {testcase_name}: {e}")
+            # (We expect errors here for 4 channels, so just print a minimal warning)
+            if 'cocircular' in str(e):
+                print(f"    Note: Topomap skipped (expected for low channel count).")
+            else:
+                print(f"    Warning: Could not save topomap for {testcase_name}: {e}")
         # -------------------------------
 
-        psd = np.mean(spectrum.get_data(), axis=0) 
+        psds = spectrum.get_data() # (n_epochs, n_channels, n_freqs)
+        psd_avg_file = np.mean(psds, axis=0) # (n_channels, n_freqs)
         freqs = spectrum.freqs
 
-        # --- [NEW PLOT 2: PSD Curve] ---
+        # --- [NEW] Store data for unified plot ---
+        all_psds_list.append(psd_avg_file)
+        if all_freqs is None:
+            all_freqs = freqs
+        # ---------------------------------------
+
+
+        # --- [NEW PLOT 2: PSD Curve] (Individual) ---
         try:
             plt.figure(figsize=(10, 6))
             channels_to_plot = [ch for ch in KEY_CHANNELS if ch in epochs.ch_names]
             for ch in channels_to_plot:
                 ch_idx = epochs.ch_names.index(ch)
-                plt.plot(freqs, 10 * np.log10(psd[ch_idx, :]), label=ch)
+                plt.plot(freqs, 10 * np.log10(psd_avg_file[ch_idx, :]), label=ch)
             
             plt.xlabel('Frequency (Hz)')
             plt.ylabel('Power Spectral Density (dB/Hz)')
@@ -128,9 +166,9 @@ for file_path in epoch_files:
         beta_idx = np.where((freqs >= BETA_BAND[0]) & (freqs <= BETA_BAND[1]))[0]
 
         # Get mean power per band
-        theta_power = np.mean(psd[:, theta_idx], axis=1)
-        alpha_power = np.mean(psd[:, alpha_idx], axis=1)
-        beta_power = np.mean(psd[:, beta_idx], axis=1)
+        theta_power = np.mean(psd_avg_file[:, theta_idx], axis=1)
+        alpha_power = np.mean(psd_avg_file[:, alpha_idx], axis=1)
+        beta_power = np.mean(psd_avg_file[:, beta_idx], axis=1)
 
         # Create dicts
         theta_dict = dict(zip(epochs.ch_names, theta_power))
@@ -141,9 +179,9 @@ for file_path in epoch_files:
         def safe_log(val):
             if pd.isna(val) or val <= 0: # check non-positive
                 return np.nan
-            return np.log(val) # remove 1e-10
+            return np.log(val)
 
-        def get_power(ch, power_dict): # Renamed
+        def get_power(ch, power_dict):
             return power_dict[ch] if ch in power_dict else np.nan
 
         # Get alpha powers
@@ -154,7 +192,7 @@ for file_path in epoch_files:
         F3_theta, F4_theta = [get_power(ch, theta_dict) for ch in ['F3', 'F4']]
         F3_beta, F4_beta = [get_power(ch, beta_dict) for ch in ['F3', 'F4']]
 
-        # Calculate original metrics
+        # Calculate original metrics (All are calculated for CSV)
         FAA = safe_log(F4_alpha) - safe_log(F3_alpha)
         OAA = safe_log(O2_alpha) - safe_log(O1_alpha)
         OASI = (O1_alpha + O2_alpha) / 2
@@ -170,24 +208,24 @@ for file_path in epoch_files:
             'testcase': testcase_name,
             'FAA': FAA,
             'FAP': FAP,
-            'OAA': OAA,
-            'OASI': OASI,
-            'TBR': TBR # Add TBR
+            'OAA': OAA,   # Still saved in CSV
+            'OASI': OASI, # Saved in CSV & Plotted
+            'TBR': TBR
         }
         
         all_metrics.append(metrics)
         
-        # --- [MODIFIED] Plot and save summary for THIS file ---
+        # --- [MODIFIED] Plot and save summary for THIS file (FAA, FAP, OASI, TBR) ---
         plt.figure(figsize=(7, 4))
         
+        # Note: We use 'metric_keys' defined outside the loop
         current_values = [metrics[key] for key in metric_keys] 
         
         bars = plt.bar(metric_keys, current_values, color=plot_colors)
-        plt.bar_label(bars, fmt='%.3f', padding=3, fontsize=9) # Add labels
+        plt.bar_label(bars, fmt='%.3f', padding=3, fontsize=9)
         
         plt.title(f"EEG Feature Summary ({testcase_name})")
         plt.ylabel("Value")
-        # plt.ylim(-10.0, 10.0) # Removed for auto-scaling
         
         # adjust y-axis limits to give space for labels
         ymin, ymax = plt.ylim()
@@ -197,13 +235,13 @@ for file_path in epoch_files:
         plt.grid(alpha=0.3, linestyle='--')
         plt.tight_layout()
 
-        img_path = os.path.join(output_folder, f"EEG_features_{testcase_name}.png")
+        img_path = os.path.join(OUTPUT_FOLDER_NAME, f"EEG_features_{testcase_name}.png")
         plt.savefig(img_path)
         plt.close()
         # ----------------------------------------------------
         
         print(f"*** Successfully processed {testcase_name} ***")
-        print(f"*** Individual plots saved to {output_folder} ***\n")
+        print(f"*** Individual plots saved to {OUTPUT_FOLDER_NAME} ***\n")
 
 
     except Exception as e:
@@ -214,16 +252,16 @@ if all_metrics:
     df = pd.DataFrame(all_metrics)
     
     # Save the CSV with individual results (as before)
-    csv_path = os.path.join(csv_folder, f"EEG_features_{TESTCASE}_ALL.csv")
+    csv_path = os.path.join(CSV_FOLDER_NAME, f"EEG_features_{TESTCASE}_ALL.csv")
     df.to_csv(csv_path, index=False)
     
     print(f"--- All processing complete ---")
     print(f"Successfully processed {len(all_metrics)} files.")
     print(f"Individual results saved to: {csv_path}")
     
-    # --- [MODIFIED] Plot and save AVERAGE summary plot ---
+    # --- [MODIFIED] Plot and save AVERAGE summary plot (FAA, FAP, OASI, TBR) ---
     
-    # Calculate averages
+    # Calculate averages (for plotting keys only)
     average_metrics = df[metric_keys].mean()
 
     plt.figure(figsize=(7, 4.5)) 
@@ -235,7 +273,6 @@ if all_metrics:
     
     plt.grid(alpha=0.3, linestyle='--')
     
-    # Add data labels on top of bars (using bar_label for simplicity)
     plt.bar_label(bars, fmt='%.3f', padding=3, fontsize=9)
 
     # adjust y-axis limits to give space for labels
@@ -245,7 +282,7 @@ if all_metrics:
     
     plt.tight_layout()
 
-    img_path_avg = os.path.join(csv_folder, f"EEG_features_{TESTCASE}_AVERAGE_plot.png")
+    img_path_avg = os.path.join(CSV_FOLDER_NAME, f"EEG_features_{TESTCASE}_AVERAGE_plot.png")
     plt.savefig(img_path_avg)
     plt.close()
     
@@ -253,18 +290,54 @@ if all_metrics:
     
     # --- [MODIFIED] Create and save combined CSV (individual + average) ---
     
+    # Calculate averages for ALL metrics for the CSV
+    all_average_metrics = df[['FAA', 'FAP', 'OAA', 'OASI', 'TBR']].mean()
+    
     avg_row = {'testcase': f'AVERAGE ({len(all_metrics)} files)'}
-    avg_row.update(average_metrics.to_dict())
+    avg_row.update(all_average_metrics.to_dict())
     
     avg_df = pd.DataFrame([avg_row])
     
     df_combined = pd.concat([df, avg_df], ignore_index=True)
     
-    csv_path_combined = os.path.join(csv_folder, f"EEG_features_{TESTCASE}_ALL_with_AVG.csv")
+    csv_path_combined = os.path.join(CSV_FOLDER_NAME, f"EEG_features_{TESTCASE}_ALL_with_AVG.csv")
     df_combined.to_csv(csv_path_combined, index=False)
     # -------------------------------------------------------------------
     
     print(f"Combined (Individual + AVG) results saved to: {csv_path_combined}")
 
+
+    # --- [NEW] Plot and save UNIFIED PSD CURVE plot ---
+    if all_psds_list and all_freqs is not None and ch_names_last is not None:
+        print(f"Generating Unified PSD Curve plot...")
+        try:
+            # (A) Calculate the average PSD across all files
+            unified_psd_avg = np.mean(all_psds_list, axis=0) # (n_channels, n_freqs)
+            
+            # (B) Plot unified PSD Curve
+            plt.figure(figsize=(10, 6))
+            channels_to_plot = [ch for ch in KEY_CHANNELS if ch in ch_names_last]
+            for ch in channels_to_plot:
+                ch_idx = ch_names_last.index(ch)
+                plt.plot(all_freqs, 10 * np.log10(unified_psd_avg[ch_idx, :]), label=ch)
+            
+            plt.xlabel('Frequency (Hz)')
+            plt.ylabel('Power Spectral Density (dB/Hz)')
+            plt.title(f'PSD Curves - AVERAGE ({TESTCASE}) - {len(all_psds_list)} files')
+            plt.legend()
+            plt.grid(alpha=0.5, linestyle='--')
+            plt.tight_layout()
+            
+            psd_curve_img_path = os.path.join(summary_psd_folder, f"EEG_psd_curve_{TESTCASE}_AVERAGE.png")
+            plt.savefig(psd_curve_img_path)
+            plt.close()
+            print(f"  Saved unified PSD curve plot to: {psd_curve_img_path}")
+
+        except Exception as e:
+            print(f"    Warning: Could not generate unified PSD curve plot. Error: {e}")
+    # -----------------------------------------------
+
 else:
     print("--- No files processed. Exiting. ---")
+
+print("\n--- Analysis complete. ---")
